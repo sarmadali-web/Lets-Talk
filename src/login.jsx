@@ -1,28 +1,60 @@
-// Login.jsx
+import { useEffect } from 'react';
 import { auth, provider, db } from './firebaseConfig';
-import { signInWithPopup } from 'firebase/auth';
+import {
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 
 function Login({ setUser }) {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   const loginWithGoogle = async () => {
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        await saveUserToFirestore(user);
+        setUser(user);
+      }
+    } catch (error) {
+      console.error('Google login error:', error.message);
+      alert('Login failed. Please try again.');
+    }
+  };
 
-      // Save user to Firestore
-      await setDoc(doc(db, "users", user.uid), {
+  const saveUserToFirestore = async (user) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         name: user.displayName,
         email: user.email,
         photoURL: user.photoURL,
       });
-
-      setUser(user);
-    } catch (error) {
-      console.error("Google login error:", error.message);
-      alert("Login failed. Please try again.");
+    } catch (err) {
+      console.error('Error saving user:', err.message);
     }
   };
+
+  // Handle redirect login result
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user) {
+          saveUserToFirestore(result.user);
+          setUser(result.user);
+        }
+      })
+      .catch((error) => {
+        if (error) {
+          console.error('Redirect login error:', error.message);
+        }
+      });
+  }, []);
 
   const containerStyle = {
     display: 'flex',
